@@ -1,0 +1,24 @@
+
+Eval
+
+python /home/gincy/音乐/Mamba-UNet/code/eval_2D.py \
+  --root_path /home/gincy/音乐/Mamba-UNet/data/ACDC \
+  --exp ACDC/Semi_Mamba_UNet_3\
+  --labeled_num 140 \
+  --model mambaunet \
+  --cfg /home/gincy/音乐/Mamba-UNet/code/configs/vmamba_tiny.yaml \
+  --num_classes 4 \
+  --patch_size 224 224 \
+  --which model1
+
+python /home/gincy/音乐/Mamba-UNet/code/eval_2D.py   
+   --root_path /home/gincy/音乐/Mamba-UNet/data/ACDC   
+   --exp ACDC/VIM_140_labeled  --labeled_num 140   
+   --model mambaunet   --cfg /home/gincy/音乐/Mamba-UNet/code/configs/vmamba_tiny.yaml   
+   --num_classes 4   --patch_size 224 224   --which model
+
+Train
+
+ python train_fully_supervised_2D_VIM.py 
+   --root_path ../data/ACDC --exp ACDC/VIM 
+   --model mambaunet --max_iterations 1000 --batch_size 24  --num_classes 4 

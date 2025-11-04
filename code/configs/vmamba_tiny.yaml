@@ -1,0 +1,13 @@
+MODEL:
+  TYPE: vssm
+  NAME: vssm_tiny
+  DROP_RATE: 0.0        ### new added
+  DROP_PATH_RATE: 0.2
+  PRETRAIN_CKPT: "../code/pretrained_ckpt/vmamba_tiny_e292.pth"
+  VSSM:
+    EMBED_DIM: 96
+    DEPTHS: [ 2, 2, 2, 2 ]
+    PATCH_SIZE: 4
+TRAIN:
+  USE_CHECKPOINT: False
+  
