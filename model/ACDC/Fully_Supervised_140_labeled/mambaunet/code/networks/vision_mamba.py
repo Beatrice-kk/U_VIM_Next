@@ -23,27 +23,27 @@ logger = logging.getLogger(__name__)
 
 
 class ParallelConvMambaBlock(nn.Module):
-    """并行卷积层和Mamba交互模块 - 用于解码器增强"""
+    """并行卷积层和Mamba交互模块"""
     def __init__(self, dim, d_state=16, kernel_size=3):
         super(ParallelConvMambaBlock, self).__init__()
         self.dim = dim
         
-        # ========== 并行卷积分支：深度可分离卷积 ==========
+        # 并行卷积层分支
         self.conv_branch = nn.Sequential(
-            Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size//2, groups=dim),  # 深度卷积
+            Conv2d(dim, dim, kernel_size=kernel_size, padding=kernel_size//2, groups=dim),
             BatchNorm2d(dim),
             ReLU(inplace=True),
-            Conv2d(dim, dim, kernel_size=1),  # 点卷积
+            Conv2d(dim, dim, kernel_size=1),
             BatchNorm2d(dim)
         )
         
-        # ========== Mamba交互分支：状态空间模型 ==========
+        # Mamba交互分支
         self.mamba_branch = SS2D(d_model=dim, d_state=d_state, dropout=0.0)
         self.norm = LayerNorm(dim)
         
-        # ========== 融合层：将两个分支的输出融合 ==========
+        # 融合层
         self.fusion = nn.Sequential(
-            Linear(dim * 2, dim),  # 融合卷积和Mamba特征
+            Linear(dim * 2, dim),
             LayerNorm(dim)
         )
         
@@ -90,13 +90,18 @@ class MambaUnet(nn.Module):
                               use_checkpoint=config.TRAIN.USE_CHECKPOINT
                               )
         
-        # ========== 新增：为解码器各层添加并行卷积和Mamba交互模块 ==========
+        # 为解码器添加并行卷积和Mamba交互模块
+        # 获取解码器各层的维度
         embed_dim = config.MODEL.VSSM.EMBED_DIM
         depths = config.MODEL.VSSM.DEPTHS
         num_layers = len(depths)
         
-        # 为每个解码器层创建并行模块（注意：VSSLayer_up中的upsample会将维度减半）
-        # 各层输出维度：inx=0→384, inx=1→192, inx=2→96, inx=3→96
+        # 为每个解码器层创建并行模块
+        # 解码器各层在layer_up之后的输出维度：
+        # inx=0: PatchExpand输出 embed_dim * 2 ** (num_layers - 2) = 384
+        # inx=1: VSSLayer_up (有upsample) 输入384，输出192（PatchExpand将维度减半）
+        # inx=2: VSSLayer_up (有upsample) 输入192，输出96（PatchExpand将维度减半）
+        # inx=3: VSSLayer_up (无upsample) 输入96，输出96
         self.parallel_blocks = nn.ModuleList()
         for i_layer in range(num_layers):
             if i_layer == 0:
@@ -132,9 +137,10 @@ class MambaUnet(nn.Module):
                 x = self.mamba_unet.concat_back_dim[inx](x)
                 x = layer_up(x)
             
-            # ========== 新增：在每个解码器层后应用并行卷积和Mamba交互 ==========
+            # 在解码器层之后添加并行卷积和Mamba交互
+            # 对所有解码器层应用并行块
             if inx < len(self.parallel_blocks):
-                x = self.parallel_blocks[inx](x)  # 并行处理增强特征
+                x = self.parallel_blocks[inx](x)
         
         x = self.mamba_unet.norm_up(x)  # B H W C
         

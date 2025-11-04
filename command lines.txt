@@ -21,4 +21,4 @@ Train
 
  python train_fully_supervised_2D_VIM.py 
    --root_path ../data/ACDC --exp ACDC/VIM 
-   --model mambaunet --max_iterations 1000 --batch_size 24  --num_classes 4 
+   --model mambaunet --max_iterations 1000 --batch_size 4  --num_classes 4 

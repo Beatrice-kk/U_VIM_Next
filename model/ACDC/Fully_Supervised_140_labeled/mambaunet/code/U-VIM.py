@@ -139,8 +139,10 @@ def train(args, snapshot_path):
     bce_loss = nn.BCELoss()
     
     def compute_boundary_from_prediction_torch(pred_mask):
-        """从预测掩码中计算边界（用于边界损失计算）"""
-        # 使用形态学腐蚀操作提取边界：边界 = 原始掩码 - 腐蚀后的掩码
+        """从预测掩码中计算边界（PyTorch版本）"""
+        # pred_mask: B, H, W (torch tensor)
+        # 使用形态学操作计算边界
+        # 边界 = 原始掩码 - 腐蚀后的掩码
         from scipy.ndimage import binary_erosion as scipy_binary_erosion
         
         pred_mask_np = pred_mask.cpu().numpy().astype(np.uint8)
@@ -149,7 +151,7 @@ def train(args, snapshot_path):
         for b in range(pred_mask_np.shape[0]):
             mask = pred_mask_np[b]
             mask_binary = (mask > 0).astype(np.uint8)
-            structure = np.ones((3, 3), dtype=np.uint8)  # 3x3结构元素
+            structure = np.ones((3, 3), dtype=np.uint8)
             eroded = scipy_binary_erosion(mask_binary, structure=structure).astype(np.uint8)
             boundary_pred[b] = (mask_binary - eroded).astype(np.float32)
         
@@ -177,16 +179,17 @@ def train(args, snapshot_path):
             loss_ce = ce_loss(outputs, label_batch[:].long())
             loss_dice = dice_loss(outputs_soft, label_batch.unsqueeze(1))
             
-            # ========== 新增：边界损失计算 ==========
+            # 计算边界损失
             loss_boundary = torch.tensor(0.0).cuda()
             if boundary_batch is not None:
-                # 从预测掩码中提取边界（使用形态学腐蚀）
+                # 从预测输出中计算边界
                 pred_mask = torch.argmax(outputs_soft, dim=1)  # B, H, W
                 boundary_pred = compute_boundary_from_prediction_torch(pred_mask)  # B, H, W
-                # 计算边界BCE损失
+                
+                # 计算边界损失（BCE损失）
+                # boundary_pred 和 boundary_batch 都是 B, H, W
                 loss_boundary = bce_loss(boundary_pred, boundary_batch)
             
-            # 总损失 = 分割损失 + 边界损失
             loss = 0.5 * (loss_dice + loss_ce) + 0.3 * loss_boundary
             optimizer.zero_grad()
             loss.backward()

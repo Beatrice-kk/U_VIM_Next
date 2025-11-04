@@ -70,14 +70,15 @@ class BaseDataSets(Dataset):
         image = h5f["image"][:]
         label = h5f["label"][:]
         
-        # ========== 新增：生成边界图 ==========
-        # 使用形态学腐蚀操作提取边界：边界 = 原始掩码 - 腐蚀后的掩码
+        # 生成边界：使用二值腐蚀来获取边界
+        # 边界 = 原始标签 - 腐蚀后的标签
         label_binary = (label > 0).astype(np.uint8)
-        structure = np.ones((3, 3), dtype=np.uint8)  # 3x3结构元素
+        # 使用3x3的结构元素进行腐蚀
+        structure = np.ones((3, 3), dtype=np.uint8)
         eroded_label = binary_erosion(label_binary, structure=structure).astype(np.uint8)
         boundary = (label_binary - eroded_label).astype(np.uint8)
         
-        sample = {"image": image, "label": label, "boundary": boundary}  # 添加boundary字段
+        sample = {"image": image, "label": label, "boundary": boundary}
         if self.split == "train":
             if None not in (self.ops_weak, self.ops_strong):
                 sample = self.transform(sample, self.ops_weak, self.ops_strong)
@@ -235,30 +236,31 @@ class RandomGenerator(object):
 
     def __call__(self, sample):
         image, label = sample["image"], sample["label"]
-        boundary = sample.get("boundary", None)  # 获取边界（如果存在）
-        # 数据增强：随机旋转翻转或随机旋转
+        boundary = sample.get("boundary", None)
+        # ind = random.randrange(0, img.shape[0])
+        # image = img[ind, ...]
+        # label = lab[ind, ...]
         if random.random() > 0.5:
             if boundary is not None:
-                image, label, boundary = random_rot_flip(image, label, boundary)  # 边界同步变换
+                image, label, boundary = random_rot_flip(image, label, boundary)
             else:
                 image, label = random_rot_flip(image, label)
         elif random.random() > 0.5:
             if boundary is not None:
-                image, label, boundary = random_rotate(image, label, boundary)  # 边界同步变换
+                image, label, boundary = random_rotate(image, label, boundary)
             else:
                 image, label = random_rotate(image, label)
-        # 调整大小
         x, y = image.shape
         image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y), order=0)
         label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y), order=0)
         if boundary is not None:
-            boundary = zoom(boundary, (self.output_size[0] / x, self.output_size[1] / y), order=0)  # 边界同步缩放
+            boundary = zoom(boundary, (self.output_size[0] / x, self.output_size[1] / y), order=0)
             boundary = torch.from_numpy(boundary.astype(np.uint8))
         image = torch.from_numpy(image.astype(np.float32)).unsqueeze(0)
         label = torch.from_numpy(label.astype(np.uint8))
         sample = {"image": image, "label": label}
         if boundary is not None:
-            sample["boundary"] = boundary  # 添加边界到sample
+            sample["boundary"] = boundary
         return sample
 
 
