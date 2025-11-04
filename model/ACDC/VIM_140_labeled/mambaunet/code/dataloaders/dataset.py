@@ -10,7 +10,6 @@ from scipy.ndimage.interpolation import zoom
 from torchvision import transforms
 import itertools
 from scipy import ndimage
-from scipy.ndimage import binary_erosion
 from torch.utils.data.sampler import Sampler
 import augmentations
 from augmentations.ctaugment import OPS
@@ -69,17 +68,7 @@ class BaseDataSets(Dataset):
             h5f = h5py.File(self._base_dir + "/data/{}.h5".format(case), "r")
         image = h5f["image"][:]
         label = h5f["label"][:]
-        
-        # ========== 新增：生成边界图 ==========
-        # 使用形态学腐蚀操作提取边界：边界 = 原始掩码 - 腐蚀后的掩码
-        label_binary = (label > 0).astype(np.uint8)
-      #   structure = np.ones((3, 3), dtype=np.uint8)  # 3x3结构元素
-        structure = np.ones((label_binary.ndim) * (3,), dtype=np.uint8)  #自适应维度
-
-        eroded_label = binary_erosion(label_binary, structure=structure).astype(np.uint8)
-        boundary = (label_binary - eroded_label).astype(np.uint8)
-        
-        sample = {"image": image, "label": label, "boundary": boundary}  # 添加boundary字段
+        sample = {"image": image, "label": label}
         if self.split == "train":
             if None not in (self.ops_weak, self.ops_strong):
                 sample = self.transform(sample, self.ops_weak, self.ops_strong)
@@ -152,7 +141,7 @@ class BaseDataSets_Synapse(Dataset):
         sample["idx"] = idx
         return sample
 
-def random_rot_flip(image, label=None, boundary=None):
+def random_rot_flip(image, label=None):
     k = np.random.randint(0, 4)
     image = np.rot90(image, k)
     axis = np.random.randint(0, 2)
@@ -160,22 +149,15 @@ def random_rot_flip(image, label=None, boundary=None):
     if label is not None:
         label = np.rot90(label, k)
         label = np.flip(label, axis=axis).copy()
-        if boundary is not None:
-            boundary = np.rot90(boundary, k)
-            boundary = np.flip(boundary, axis=axis).copy()
-            return image, label, boundary
         return image, label
     else:
         return image
 
 
-def random_rotate(image, label, boundary=None):
+def random_rotate(image, label):
     angle = np.random.randint(-20, 20)
     image = ndimage.rotate(image, angle, order=0, reshape=False)
     label = ndimage.rotate(label, angle, order=0, reshape=False)
-    if boundary is not None:
-        boundary = ndimage.rotate(boundary, angle, order=0, reshape=False)
-        return image, label, boundary
     return image, label
 
 
@@ -237,30 +219,19 @@ class RandomGenerator(object):
 
     def __call__(self, sample):
         image, label = sample["image"], sample["label"]
-        boundary = sample.get("boundary", None)  # 获取边界（如果存在）
-        # 数据增强：随机旋转翻转或随机旋转
+        # ind = random.randrange(0, img.shape[0])
+        # image = img[ind, ...]
+        # label = lab[ind, ...]
         if random.random() > 0.5:
-            if boundary is not None:
-                image, label, boundary = random_rot_flip(image, label, boundary)  # 边界同步变换
-            else:
-                image, label = random_rot_flip(image, label)
+            image, label = random_rot_flip(image, label)
         elif random.random() > 0.5:
-            if boundary is not None:
-                image, label, boundary = random_rotate(image, label, boundary)  # 边界同步变换
-            else:
-                image, label = random_rotate(image, label)
-        # 调整大小
+            image, label = random_rotate(image, label)
         x, y = image.shape
         image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y), order=0)
         label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y), order=0)
-        if boundary is not None:
-            boundary = zoom(boundary, (self.output_size[0] / x, self.output_size[1] / y), order=0)  # 边界同步缩放
-            boundary = torch.from_numpy(boundary.astype(np.uint8))
         image = torch.from_numpy(image.astype(np.float32)).unsqueeze(0)
         label = torch.from_numpy(label.astype(np.uint8))
         sample = {"image": image, "label": label}
-        if boundary is not None:
-            sample["boundary"] = boundary  # 添加边界到sample
         return sample
 
 
